@@ -2,7 +2,7 @@
 
 Intel's Control Enforcement Technology requires hardware capabilities that some processors are not equiped with. This emulator will enforce Intel's CET with Intel's Pin Tools
 
-# Prerequesits
+# Prerequisites
 ## Intel's ICC Compiler
 
 In order to write a program that works with Intel's Control Enforcement Technology, it needs to be compiled with Intel's compiler ICC. The makefile for that program must also contain 3 flags:
