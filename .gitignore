@@ -31,5 +31,4 @@
 *.out
 *.app
 
-# Directories and dependencies
-Intel_Pin
+.gitignore
