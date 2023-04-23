@@ -16,27 +16,41 @@ VOID CallHandler(ADDRINT InstructionAddress) {
 /* ===================================================================== */
 /* Trigger function whenever a RET instruction is encountered           */
 /* ===================================================================== */
-VOID RetHandler(ADDRINT retAddr, CONTEXT* ctxt) { 
-    
+VOID RetHandler(const CONTEXT* ctxt) { 
+    ADDRINT inst_ptr = (ADDRINT)PIN_GetContextReg(ctxt, REG_INST_PTR);
+    std::cout << "Returned to: " << std::hex << inst_ptr << std::endl;
 }
 
 /* ===================================================================== */
 /* Intrumentation routine that will be called by Pin                     */
 /* ===================================================================== */
-VOID InstructionInstrumentation(INS ins, VOID *v) {
+VOID ImageLoad(IMG img, VOID* v) {
+    // Check to see if image is compiled with Shadow Stack
+    // This check is only valid for Linux OS
+    if (IMG_HasProperty(img, IMG_PROPERTY_SHSTK_ENABLED)) {
+        std::cout << "Image Loaded: " << IMG_Name(img) << std::endl;
+        // Loop through sections of the image
+        for (SEC sec = IMG_SecHead(img); SEC_Valid(sec); sec = SEC_Next(sec)) {
+            // Loop through routines in the section 
+            for (RTN rtn = SEC_RtnHead(sec); RTN_Valid(rtn); RTN_Next(rtn)) {
+                RTN_Open(rtn);
 
-    // Sets callback function for call instruction
-    if (INS_IsCall(ins)) {
-        INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(CallHandler), IARG_INST_PTR, IARG_END);
+                // Loop through all instructions in routine
+                for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
+                    // Instrument each return instruction
+                    if (INS_IsRet(ins)) {
+                        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)RetHandler, IARG_CONTEXT, IARG_END);
+                    }
+                }
+                RTN_Close(rtn);
+            }
+        }
     }
-    // Sets callback function for ret instructions
-    else if (INS_IsRet(ins)) {
-        INS_InsertCall(ins, IPOINT_BEFORE, AFUNPTR(RetHandler), IARG_BRANCH_TARGET_ADDR, IARG_CONST_CONTEXT, IARG_END);
-    }
 
-    // Sets callback function for any indirect branch or call instruction
-    if (INS_IsIndirectControlFlow(ins)) {
-
+    // Check to see if image is compiled with Indirect Branch Tracking
+    // This check is only valid for Linux OS
+    if (IMG_HasProperty(img, IMG_PROPERTY_IBT_ENABLED)) {
+        std::cout << "Image Loaded: " << IMG_Name(img) << std::endl;
     }
 }
 
@@ -61,7 +75,7 @@ int main(int argc, char *argv[]) {
     PIN_InitSymbols();
 
     // Register InstructionInstrumentation to be called for every instruction
-    INS_AddInstrumentFunction(InstructionInstrumentation, 0);
+    IMG_AddInstrumentFunction(ImageLoad, 0);
 
     // Run application
     PIN_StartProgram();
