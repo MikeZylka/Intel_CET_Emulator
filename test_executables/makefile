@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -Werror -fno-stack-protector -fcf-protection
+CFLAGS=-Wall -Wextra -Werror -fno-stack-protector -fcf-protection -no-pie
 
 all: vuln
 

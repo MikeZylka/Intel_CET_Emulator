@@ -10,6 +10,7 @@
 #define ENDBR64 4196274163
 
 std::unordered_map<std::string, BOOL> COMPATIBLE_IMGS;
+std::stack<ADDRINT> SHADOW_STACK;
  
 // Pin calls this function every time a new rtn is executed
 VOID Routine(RTN rtn, VOID* v)
@@ -97,17 +98,27 @@ VOID ImageLoad(IMG img, VOID* v) {
     COMPATIBLE_IMGS[IMG_Name(img)] = false;
 }
 
-VOID SHSTK_Push(INS ins) {
-    std::cout << "Instruction: " << INS_Disassemble(ins) << std::endl;
+VOID SHSTK_Push(ADDRINT ip, UINT32 size) {
+    SHADOW_STACK.push(ip + size);
 }
 
-VOID SHSTK_PopAndCheck() {
+VOID SHSTK_PopAndCheck(CONTEXT* ctxt) {
+    ADDRINT TakenIP = (ADDRINT) PIN_GetContextReg(ctxt, REG_INST_PTR);
     
+    if (!SHADOW_STACK.empty() && SHADOW_STACK.top() != TakenIP) { 
+        std::cout << "Ret Address Overwritten! Execution stopped." << std::endl;
+        PIN_ExitProcess(1);
+    }
+    SHADOW_STACK.pop();
 }
 
-VOID Instruction(INS ins, VOID* v) {
-    if(INS_IsCall(ins)) {
-        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)SHSTK_Push, IARG_PTR, ins, IARG_END);
+VOID InstrumentInstruction(INS ins, VOID* v) {
+    if(INS_IsCall(ins) || INS_IsFarCall(ins)) {
+        USIZE ins_size = INS_Size(ins);
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)SHSTK_Push, IARG_INST_PTR, IARG_UINT32, ins_size, IARG_END);
+    }
+    else if (INS_IsRet(ins) || INS_IsFarRet(ins)){
+        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)SHSTK_PopAndCheck, IARG_CONTEXT, IARG_END);
     }
 }
  
@@ -133,8 +144,8 @@ int main(int argc, char* argv[])
     if (PIN_Init(argc, argv)) return Usage();
  
     // Register Routine to be called to instrument rtn
-    IMG_AddInstrumentFunction(ImageLoad, 0);
-    INS_AddInstrumentFunction(Instruction, 0);
+    //IMG_AddInstrumentFunction(ImageLoad, 0);
+    INS_AddInstrumentFunction(InstrumentInstruction, 0);
  
     // Start the program, never returns
     PIN_StartProgram();
