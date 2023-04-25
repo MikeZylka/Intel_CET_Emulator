@@ -1,0 +1,4 @@
+Pin: pin-3.27-98718-beaa5d51e
+Copyright 2002-2023 Intel Corporation.
+E:  cet_emulator.cpp:54: Cannot use IARG_BRANCH_TARGET_ADDR with instruction at 0x7f4fd1366c26: xend
+ check that INS_IsControlFlow is true

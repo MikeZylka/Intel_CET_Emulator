@@ -29,12 +29,13 @@ VOID Routine(RTN rtn, VOID* v)
     RTN_Close(rtn);
 }
 
-VOID IBT_Instrumentation(CONTEXT* ctxt) {
-    UINT32* first_instr = (UINT32*)PIN_GetContextReg(ctxt, REG_INST_PTR);
-    UINT32 instruction;
-    PIN_SafeCopy(&instruction, first_instr, sizeof(UINT32));
-    
-    //std::cout << "Instruction: " << std::hex <<  first_instr << std::endl;
+VOID IBT_Instrumentation(ADDRINT* target_intr) {
+
+    ADDRINT instruction;
+    PIN_SafeCopy(&instruction, target_intr, sizeof(ADDRINT));
+    PIN_LockClient();
+    std::cout << "Image: " <<  IMG_Name(IMG_FindByAddress((ADDRINT)target_intr)) << std::endl;
+    PIN_UnlockClient();
 }
 
 /* ======================================================================== */
@@ -49,8 +50,9 @@ VOID InstrumentImage(IMG img) {
             RTN_Open(rtn);
 
             for (INS ins = RTN_InsHead(rtn); INS_Valid(ins); ins = INS_Next(ins)) {
-                if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins)) {
-                    INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)IBT_Instrumentation, IARG_CONTEXT, IARG_END);
+                if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && INS_Opcode(ins) != XED_ICLASS_XEND && INS_Opcode(ins) != XED_ICLASS_XBEGIN) {
+                    //std::cout << "Instruction = " << INS_Disassemble(ins) << "; Address = " << std::hex << INS_Address(ins) << std::endl;
+                    INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)IBT_Instrumentation, IARG_BRANCH_TARGET_ADDR, IARG_END);
                 }
             }
 
@@ -73,52 +75,70 @@ VOID ImageLoad(IMG img, VOID* v) {
             RTN_Open(rtn);
  
             // Get the first instruction of a routine
-            UINT32* first_instr = (UINT32*) RTN_Address(rtn);
-            UINT32 instruction;
-            PIN_SafeCopy(&instruction, first_instr, sizeof(UINT32));
+            ADDRINT* first_instr = (ADDRINT*) RTN_Address(rtn);
+            UINT32 instruction32;
+            PIN_SafeCopy(&instruction, first_instr, sizeof(ADDRINT));
  
             // Check to see if the first instruction is an endbranch
             // This can determine if the image is compiled with IBT
             if (instruction == ENDBR64) {
                 // Close routine before moving to function
                 RTN_Close(rtn);
+
                 // Instrument the Image for IBT
                 InstrumentImage(img);
-
-                // Mark this image as IBT compatible
-                COMPATIBLE_IMGS[IMG_Name(img)] = true;
                 return;
             }
 
             // Close the RTN.
-            RTN_Close(rtn);
+            else {
+                RTN_Close(rtn);
+            }
         }
     }
 
-    COMPATIBLE_IMGS[IMG_Name(img)] = false;
 }
 
+/* ===================================================================== */
+/* Push address into shadow stack                                        */
+/* ===================================================================== */
 VOID SHSTK_Push(ADDRINT ip, UINT32 size) {
     SHADOW_STACK.push(ip + size);
 }
 
+/* ===================================================================== */
+/* Pop address from shadow stack and compare return addresses            */
+/* ===================================================================== */
 VOID SHSTK_PopAndCheck(CONTEXT* ctxt) {
-    ADDRINT TakenIP = (ADDRINT) PIN_GetContextReg(ctxt, REG_INST_PTR);
-    
-    if (!SHADOW_STACK.empty() && SHADOW_STACK.top() != TakenIP) { 
+    // Get the current stack pointer
+    ADDRINT* stack_addr = (ADDRINT*)PIN_GetContextReg(ctxt, REG_STACK_PTR);
+    ADDRINT ret_addr;
+
+    // Get the return address from the top of the shadow stack
+    PIN_SafeCopy(&ret_addr, stack_addr, sizeof(ADDRINT));
+
+    // Check if the return address matches the top of the shadow stack
+    if (!SHADOW_STACK.empty() && SHADOW_STACK.top() != ret_addr) { 
         std::cout << "Ret Address Overwritten! Execution stopped." << std::endl;
         PIN_ExitProcess(1);
     }
+
+    // Pop the top of the shadow stack
     SHADOW_STACK.pop();
 }
 
+/* ===================================================================== */
+/* Instrument all call and ret instructions                              */
+/* ===================================================================== */
 VOID InstrumentInstruction(INS ins, VOID* v) {
     if(INS_IsCall(ins) || INS_IsFarCall(ins)) {
+        // Insert SHSTK_Push before a call instruction
         USIZE ins_size = INS_Size(ins);
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)SHSTK_Push, IARG_INST_PTR, IARG_UINT32, ins_size, IARG_END);
     }
     else if (INS_IsRet(ins) || INS_IsFarRet(ins)){
-        INS_InsertCall(ins, IPOINT_TAKEN_BRANCH, (AFUNPTR)SHSTK_PopAndCheck, IARG_CONTEXT, IARG_END);
+        // Insert SHSTK_PopAndCheck before a ret instruction
+        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)SHSTK_PopAndCheck, IARG_CONTEXT, IARG_END);
     }
 }
  
@@ -144,8 +164,8 @@ int main(int argc, char* argv[])
     if (PIN_Init(argc, argv)) return Usage();
  
     // Register Routine to be called to instrument rtn
-    //IMG_AddInstrumentFunction(ImageLoad, 0);
-    INS_AddInstrumentFunction(InstrumentInstruction, 0);
+    IMG_AddInstrumentFunction(ImageLoad, 0);
+    // INS_AddInstrumentFunction(InstrumentInstruction, 0);
  
     // Start the program, never returns
     PIN_StartProgram();
