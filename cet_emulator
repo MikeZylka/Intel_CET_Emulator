@@ -2,7 +2,7 @@
 
 PIN_ROOT=pin_root/pin
 TOOL=source/obj-intel64/cet_emulator.so
-EXECUTABLE=$1
+EXECUTABLE="$1"
 shift
 
-$PIN_ROOT -t $TOOL -- $EXECUTABLE "@"
+"$PIN_ROOT" -t "$TOOL" -- "$EXECUTABLE" "$@"
