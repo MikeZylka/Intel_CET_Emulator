@@ -35,3 +35,4 @@
 # General Ignore
 *testing/
 .vscode/
+.gitignore
