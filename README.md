@@ -1,32 +1,24 @@
 # Intel_CET_Emulator
 
-Intel's Control Enforcement Technology requires hardware capabilities that some processors are not equiped with. This emulator will enforce Intel's CET with Intel's Pin Tools
+Intel's Control-flow Enforcement Technology (CET) requires hardware capabilities that legacy processors are not equiped with. This emulator will enforce Intel's CET with Intel's Pin Tools. The emulator allows developers to test and debug CET-protected code without the need for dedicated hardware as well as offer some security measures for users without the dedicated hardware.
 
-# Prerequisites
-## Intel's ICC Compiler
+## Usage
+Using the emulator is simple. Just run the bash script `./cet_emulator` followed by the progam and its arguments.
+```bash
+    ./cet_emulator ls -la
+```
 
-In order to write a program that works with Intel's Control Enforcement Technology, it needs to be compiled with Intel's compiler ICC. The makefile for that program must also contain 3 flags:
-* `-fcf-protection=full`
-* `-mcet`
-* `-msha`
+That's it! There is no need to install anything as the emulator is already preconfigured to run on repository cloning.
 
-To install Intel's ICC compiler, run the following commands:
- 1. Set up the repository. To do this, download the key to the system keyring: 
- ```
- wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \ | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
- ```
+## Features
+The CET Emulator performs the two mechanism that are offered by Intel CET:
+ - Indirect Branch Tracking (JOP and COP protection)
+ - Shadow Stack (ROP protection)
 
- 2. Add the signed entry to APT sources and configure the APT client to use the Intel repository: 
- ```
- echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
- ```
+There is plenty of documentation about this emulator in the pdf file 'Documentation.pdf'.
 
- 3. Update the packages list and repository index. 
- ```
- sudo apt update
- ```
+## Limitations
+ - As of right now, the CET emulator cannot handle multi-threaded applications but an updated version with multi-threaded support is on its way!
+ - It is not possible for this emulator to have the exact same security guarantees as its hardware-based counterpart.  This is because the Emulator is just another application running on the system, and it is possible for attackers to identify and exploit vulnerabilities in the Emulator to bypass its security measures. Thus, the Emulator is not a foolproof solution to protect against all forms of control-flow hijacking attacks.
 
- 4. Install the compiler with APT:
- ```
- sudo apt install intel-basekit
- ```
+If any issues arise please open a new issue in the repository 

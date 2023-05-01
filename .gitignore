@@ -31,4 +31,8 @@
 *.out
 *.app
 
+
+# General Ignore
+testing
+.vscode
 .gitignore

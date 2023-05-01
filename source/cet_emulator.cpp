@@ -8,6 +8,8 @@
 #include "pin.H"
 
 #define ENDBR64 4196274163
+#define ENDBR32 4213051379
+#define NOTRACK 2212560702
 
 // Data structure that will store the IDs of routines compiled with IBT
 std::unordered_map<ADDRINT, BOOL> COMPATIBLE_RTNS;
@@ -20,7 +22,7 @@ std::stack<ADDRINT> SHADOW_STACK;
 /* Function called for every indirect branch instruction inside routines    */
 /* compiled with IBT.                                                       */
 /* ======================================================================== */
-VOID IBT_Instrumentation(ADDRINT* target_intr) {
+VOID IBT_Instrumentation(ADDRINT* target_intr, ADDRINT* ip) {
     // Determine routine from target address
     PIN_LockClient();
     RTN rtn = RTN_FindByAddress((ADDRINT) target_intr);
@@ -35,10 +37,13 @@ VOID IBT_Instrumentation(ADDRINT* target_intr) {
         // Read the instruction at the branch target address
         PIN_SafeCopy(&instruction, target_intr, sizeof(UINT32));
 
+        UINT32 ip_instruction;
+        PIN_SafeCopy(&ip_instruction, ip, sizeof(UINT32));
+
         // Check if the instruction is ENDBR64
-        if (instruction != ENDBR64) {
+        if (instruction != ENDBR64 || instruction != ENDBR32) {
             std::cout << "Branch target address is not endbr64! Execution stopped."  << std::endl;
-            std::cout << "Target Instruction address: " << std::hex << target_intr << std::endl;
+            std::cout << std::hex << ip_instruction << std::endl;
             PIN_ExitProcess(1);
         }
     }
@@ -68,7 +73,7 @@ VOID ImageLoad(IMG img, VOID* v) {
             PIN_SafeCopy(&instruction, first_instr, sizeof(UINT32));
  
             // Check if the first instruction is an ENDBR64 instruction
-            if (instruction == ENDBR64) {
+            if (instruction == ENDBR64 || instruction == ENDBR64) {
                 // Mark routine as IBT compatible
                 COMPATIBLE_RTNS[RTN_Id(rtn)] = true;
 
@@ -77,8 +82,16 @@ VOID ImageLoad(IMG img, VOID* v) {
                     // Check if the instruction is an indirect branch 
                     // that is not a return or an xend or an xbegin instruction
                     if (INS_IsIndirectControlFlow(ins) && !INS_IsRet(ins) && INS_Opcode(ins) != XED_ICLASS_XEND && INS_Opcode(ins) != XED_ICLASS_XBEGIN) {
-                        // Insert a call to IBT_Instrumentation before the branch instruction
-                        INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)IBT_Instrumentation, IARG_BRANCH_TARGET_ADDR, IARG_END);
+                        
+                        // Get value at instruction pointer
+                        ADDRINT* notrack_check = (ADDRINT*) INS_Address(ins);
+                        UINT32 notrack_instr;
+                        PIN_SafeCopy(&notrack_instr, notrack_check, sizeof(UINT32));
+
+                        // Check to see if instruction is not a notrack jump
+                        if (notrack_instr != NOTRACK)
+                            // Insert a call to IBT_Instrumentation before the branch instruction
+                            INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)IBT_Instrumentation, IARG_BRANCH_TARGET_ADDR, IARG_INST_PTR, IARG_END);
                     }
 
                 }
@@ -158,15 +171,7 @@ VOID InstrumentInstruction(INS ins, VOID* v) {
         INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)SHSTK_PopAndCheck, IARG_CONTEXT, IARG_END);
     }
 }
- 
-/* ===================================================================== */
-/* Print Help Message                                                    */
-/* ===================================================================== */
- 
-INT32 Usage()
-{
-    return -1;
-}
+
  
 /* ===================================================================== */
 /* Main                                                                  */
@@ -178,7 +183,7 @@ int main(int argc, char* argv[])
     PIN_InitSymbols();
 
     // Initialize pin
-    if (PIN_Init(argc, argv)) return Usage();
+    PIN_Init(argc, argv);
  
     // Handles image loading
     IMG_AddInstrumentFunction(ImageLoad, 0);
