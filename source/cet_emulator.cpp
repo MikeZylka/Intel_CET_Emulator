@@ -22,7 +22,7 @@ std::stack<ADDRINT> SHADOW_STACK;
 /* Function called for every indirect branch instruction inside routines    */
 /* compiled with IBT.                                                       */
 /* ======================================================================== */
-VOID IBT_Instrumentation(ADDRINT* target_intr, ADDRINT* ip) {
+VOID IBT_Instrumentation(ADDRINT* target_intr) {
     // Determine routine from target address
     PIN_LockClient();
     RTN rtn = RTN_FindByAddress((ADDRINT) target_intr);
@@ -37,13 +37,10 @@ VOID IBT_Instrumentation(ADDRINT* target_intr, ADDRINT* ip) {
         // Read the instruction at the branch target address
         PIN_SafeCopy(&instruction, target_intr, sizeof(UINT32));
 
-        UINT32 ip_instruction;
-        PIN_SafeCopy(&ip_instruction, ip, sizeof(UINT32));
 
         // Check if the instruction is ENDBR64
-        if (instruction != ENDBR64 || instruction != ENDBR32) {
-            std::cout << "Branch target address is not endbr64! Execution stopped."  << std::endl;
-            std::cout << std::hex << ip_instruction << std::endl;
+        if (instruction != ENDBR64 && instruction != ENDBR32) {
+            std::cout << "Branch target address is not endbr! Execution stopped."  << std::endl;
             PIN_ExitProcess(1);
         }
     }
@@ -91,7 +88,7 @@ VOID ImageLoad(IMG img, VOID* v) {
                         // Check to see if instruction is not a notrack jump
                         if (notrack_instr != NOTRACK)
                             // Insert a call to IBT_Instrumentation before the branch instruction
-                            INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)IBT_Instrumentation, IARG_BRANCH_TARGET_ADDR, IARG_INST_PTR, IARG_END);
+                            INS_InsertCall(ins, IPOINT_BEFORE, (AFUNPTR)IBT_Instrumentation, IARG_BRANCH_TARGET_ADDR, IARG_END);
                     }
 
                 }
