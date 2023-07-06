@@ -22,5 +22,3 @@ There is plenty of documentation about this emulator in the pdf file 'Documentat
  - It is not possible for this emulator to have the exact same security guarantees as its hardware-based counterpart.  This is because the Emulator is just another application running on the system, and it is possible for attackers to identify and exploit vulnerabilities in the Emulator to bypass its security measures. Thus, the Emulator is not a foolproof solution to protect against all forms of control-flow hijacking attacks.
 
 If any issues arise please open a new issue in the repository 
-
-**.gitignore**
